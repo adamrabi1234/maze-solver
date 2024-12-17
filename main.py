@@ -1,5 +1,5 @@
 import argparse
-from queue import Queue
+from heapq import heappush, heappop
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -10,7 +10,7 @@ def load_file(file_path):
 
 # Parse command-line arguments
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Solve a maze using BFS.")
+    parser = argparse.ArgumentParser(description="Solve a maze with minimal turns using BFS.")
     parser.add_argument("file_path", type=str, help="Path to the maze file.")
     return parser.parse_args()
 
@@ -47,6 +47,7 @@ def draw_maze(maze, start, end, path=None):
 def initialize_maze(file_path):
     imported_maze = load_file(file_path)
     maze = []
+    start, end = None, None
     for line in imported_maze:
         row = []
         for char in line.strip():
@@ -66,36 +67,38 @@ def initialize_maze(file_path):
 # movement directions
 directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]  # Right, Left, Down, Up
 
-# BFS algorithm
+# Modified BFS to minimize turns
 def bfs(maze, start, end):
-    queue = Queue()
-    visited = {}  # Use a dictionary to track visited nodes and their parent nodes
-    
-    # Initialize
-    queue.put(start)
-    visited[start] = None  # Start has no parent
+    queue = []
+    heappush(queue, (0, 0, start[0], start[1], (0, 1)))  # (total_score, steps, y, x, facing)
+    visited = {}  # Track visited states with direction
+    visited[(start[0], start[1], (0, 1))] = None
 
-    while not queue.empty():
-        y, x = queue.get()  # Correctly use (row, column) order
+    while queue:
+        total_score, steps, y, x, facing = heappop(queue)
+
         if (y, x) == end:
-            return reconstruct_path(visited, start, end)
+            print(f"Final Score: {total_score}")
+            return reconstruct_path(visited, (y, x, facing))
 
-        # Explore all directions
         for dy, dx in directions:
-            new_y = y + dy
-            new_x = x + dx
-            if is_valid(maze, new_y, new_x) and (new_y, new_x) not in visited:
-                visited[(new_y, new_x)] = (y, x)  # Record the parent
-                queue.put((new_y, new_x))
+            new_y, new_x = y + dy, x + dx
+            turn_penalty = 1000 if (dy, dx) != facing else 0
+            new_score = total_score + 1 + turn_penalty  # +1 for step, +1000 for turn
+            new_steps = steps + 1
 
+            if is_valid(maze, new_y, new_x) and (new_y, new_x, (dy, dx)) not in visited:
+                visited[(new_y, new_x, (dy, dx))] = (y, x, facing)
+                heappush(queue, (new_score, new_steps, new_y, new_x, (dy, dx)))
+    
     return "No path found."
 
-def reconstruct_path(visited, start, end):
+def reconstruct_path(visited, current):
     path = []
-    current = end
-    while current is not None:
-        path.append(current)
-        current = visited[current]  # Traverse backwards using the parent nodes
+    while current:
+        y, x, _ = current
+        path.append((y, x))
+        current = visited.get(current)
     path.reverse()
     return path
 
@@ -109,5 +112,4 @@ if __name__ == "__main__":
     args = parse_arguments()
     maze, start, end = initialize_maze(args.file_path)
     path = bfs(maze, start, end)
-    print(f"Path: {path}")
     draw_maze(maze, start, end, path=path)
